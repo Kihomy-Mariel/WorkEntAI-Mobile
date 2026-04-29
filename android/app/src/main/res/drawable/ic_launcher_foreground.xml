@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WorkEntAI icon foreground: lightning bolt ⚡ + "W" letter
+  Canvas: 108dp x 108dp (safe zone: 72dp centered)
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Círculo blanco semitransparente de fondo -->
+    <path
+        android:fillColor="#22FFFFFF"
+        android:pathData="M54,54 m-32,0 a32,32 0 1,0 64,0 a32,32 0 1,0 -64,0"/>
+
+    <!-- Rayo ⚡ — forma de rayo centrada -->
+    <!-- Parte superior del rayo (triángulo superior derecho) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="
+            M54,20
+            L36,52
+            L50,52
+            L42,88
+            L72,48
+            L57,48
+            Z"/>
+
+    <!-- Sombra/brillo del rayo -->
+    <path
+        android:fillColor="#33FFFFFF"
+        android:pathData="
+            M54,20
+            L36,52
+            L50,52
+            L46,68
+            L57,48
+            Z"/>
+
+</vector>

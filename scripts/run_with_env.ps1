@@ -1,6 +1,8 @@
 # Lee el .env y lanza flutter con --dart-define por cada variable
-# Uso: .\scripts\run_with_env.ps1 run
-#      .\scripts\run_with_env.ps1 build apk
+# Uso:
+#   .\scripts\run_with_env.ps1 run
+#   .\scripts\run_with_env.ps1 build apk --release
+#   .\scripts\run_with_env.ps1 build apk --release --split-per-abi
 
 $envFile = Join-Path $PSScriptRoot ".." ".env"
 
@@ -17,6 +19,6 @@ Get-Content $envFile | ForEach-Object {
     }
 }
 
-$cmd = "flutter $args $($dartDefines -join ' ')"
-Write-Host "🚀 Ejecutando: $cmd"
-Invoke-Expression $cmd
+$flutterArgs = $args + $dartDefines
+Write-Host "🚀 Ejecutando: flutter $flutterArgs"
+& flutter @flutterArgs

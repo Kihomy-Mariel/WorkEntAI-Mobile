@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
+import '../config/app_config.dart';
 import '../models/models.dart';
 import 'auth_service.dart';
 import 'api_service.dart';
 import 'notification_service.dart';
+import 'local_database_service.dart';
+import 'offline_sync_service.dart';
 
 class AppProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
   final ApiService _apiService = ApiService();
+  late final LocalDatabaseService _localDb = LocalDatabaseService();
+  late final OfflineSyncService _syncService = OfflineSyncService(
+    db: _localDb,
+    baseUrl: AppConfig.baseUrl,
+  );
+
 
   // ── State ─────────────────────────────────────────────────────
   Map<String, dynamic>? _user;
@@ -23,6 +32,8 @@ class AppProvider extends ChangeNotifier {
   String _dataError = '';
   String _actionError = '';
   String _actionSuccess = '';
+  bool _isOffline = false;
+
 
   // ── Getters ───────────────────────────────────────────────────
   Map<String, dynamic>? get user => _user;
@@ -58,6 +69,8 @@ class AppProvider extends ChangeNotifier {
   String get dataError => _dataError;
   String get actionError => _actionError;
   String get actionSuccess => _actionSuccess;
+  bool get isOffline => _isOffline;
+
 
   // ── Auth ──────────────────────────────────────────────────────
   Future<bool> login(String email, String password) async {
@@ -116,26 +129,42 @@ class AppProvider extends ChangeNotifier {
     try {
       final rol = userRol;
       final id = userId;
+      final token = await _authService.getToken();
+      final connected = await _syncService.hayConexion();
 
-      if (rol == 'CLIENTE') {
-        final results = await Future.wait([
-          _apiService.getPoliticasActivas(),
-          _apiService.getTramitesByCliente(id),
-          _apiService.getNotificacionesNoLeidas(id),
-        ]);
-        _politicas = results[0] as List<Politica>;
-        _tramites = results[1] as List<Tramite>;
-        _notificaciones = results[2] as List<Notificacion>;
-      } else if (rol == 'FUNCIONARIO' || rol == 'ADMIN') {
-        final dept = userDepartamento;
-        final results = await Future.wait([
-          dept.isNotEmpty
-              ? _apiService.getTareasByDepartamento(dept)
-              : _apiService.getTareasByFuncionario(id),
-          _apiService.getNotificacionesNoLeidas(id),
-        ]);
-        _tareas = results[0] as List<Tarea>;
-        _notificaciones = results[1] as List<Notificacion>;
+      if (connected && token != null) {
+        _isOffline = false;
+        // Sincronizar en segundo plano/esperar
+        await _syncService.sincronizarTodo(token, rol);
+
+        if (rol == 'CLIENTE') {
+          final results = await Future.wait([
+            _apiService.getPoliticasActivas(),
+            _apiService.getTramitesByCliente(id),
+            _apiService.getNotificacionesNoLeidas(id),
+          ]);
+          _politicas = results[0] as List<Politica>;
+          _tramites = results[1] as List<Tramite>;
+          _notificaciones = results[2] as List<Notificacion>;
+        } else if (rol == 'FUNCIONARIO' || rol == 'ADMIN') {
+          final dept = userDepartamento;
+          final results = await Future.wait([
+            dept.isNotEmpty
+                ? _apiService.getTareasByDepartamento(dept)
+                : _apiService.getTareasByFuncionario(id),
+            _apiService.getNotificacionesNoLeidas(id),
+          ]);
+          _tareas = results[0] as List<Tarea>;
+          _notificaciones = results[1] as List<Notificacion>;
+        }
+      } else {
+        _isOffline = true;
+        _politicas = (await _localDb.obtenerPoliticas()).map((e) => Politica.fromJson(e)).toList();
+        _tramites = (await _localDb.obtenerTramites()).map((e) => Tramite.fromJson(e)).toList();
+        _tareas = (await _localDb.obtenerTareas()).map((e) => Tarea.fromJson(e)).toList();
+        _notificaciones = [];
+        // No setear _dataError para que no bloquee la interfaz, solo un print o indicación sutil
+        debugPrint('Modo offline. Datos cargados desde el caché local.');
       }
     } catch (e) {
       _dataError = _cleanError(e.toString());
@@ -144,6 +173,7 @@ class AppProvider extends ChangeNotifier {
     _loadingData = false;
     notifyListeners();
   }
+
 
   Future<void> cargarNotificaciones() async {
     if (userId.isEmpty) return;
@@ -161,6 +191,41 @@ class AppProvider extends ChangeNotifier {
     _actionSuccess = '';
     notifyListeners();
     try {
+      final connected = await _syncService.hayConexion();
+      if (!connected) {
+        final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
+        final politica = _politicas.firstWhere(
+          (p) => p.id == politicaId,
+          orElse: () => Politica(id: politicaId, nombre: 'Política', descripcion: '', estado: 'ACTIVA', fechaCreacion: ''),
+        );
+        final tramite = Tramite(
+          id: tempId,
+          politicaId: politicaId,
+          nombrePolitica: politica.nombre,
+          clienteId: userId,
+          nombreCliente: userNombre,
+          nodoActualId: '',
+          nombreNodoActual: 'Pendiente de sincronizar',
+          estado: 'EN_PROCESO',
+          descripcion: descripcion,
+          numeroReferencia: 'OFFLINE_SYNC',
+          historial: [],
+          fechaInicio: DateTime.now().toIso8601String(),
+        );
+
+        await _localDb.guardarAccionPendiente('CREAR_TRAMITE', {
+          'politicaId': politicaId,
+          'clienteId': userId,
+          'descripcion': descripcion,
+        });
+
+        _tramites.insert(0, tramite);
+        _actionSuccess = 'Trámite guardado localmente. Se sincronizará al recuperar conexión.';
+        _loadingAction = false;
+        notifyListeners();
+        return tramite;
+      }
+
       final tramite =
           await _apiService.solicitarTramite(politicaId, userId, descripcion);
       _tramites.insert(0, tramite);
@@ -175,6 +240,7 @@ class AppProvider extends ChangeNotifier {
       return null;
     }
   }
+
 
   Future<Tramite?> refreshTramite(String tramiteId) async {
     try {
@@ -218,6 +284,45 @@ class AppProvider extends ChangeNotifier {
     _actionError = '';
     notifyListeners();
     try {
+      final connected = await _syncService.hayConexion();
+      if (!connected) {
+        await _localDb.guardarAccionPendiente('COMPLETAR_TAREA', {
+          'tareaId': tareaId,
+          'observacion': datos['observacion'] ?? '',
+          'datosFormulario': datos['datosFormulario'] ?? {},
+        });
+
+        final idx = _tareas.indexWhere((t) => t.id == tareaId);
+        if (idx >= 0) {
+          final t = _tareas[idx];
+          _tareas[idx] = Tarea(
+            id: t.id,
+            tramiteId: t.tramiteId,
+            politicaId: t.politicaId,
+            nodoId: t.nodoId,
+            nombreNodo: t.nombreNodo,
+            departamento: t.departamento,
+            funcionarioId: t.funcionarioId,
+            nombreFuncionario: t.nombreFuncionario,
+            numeroReferenciaTramite: t.numeroReferenciaTramite,
+            nombrePolitica: t.nombrePolitica,
+            instrucciones: t.instrucciones,
+            camposFormulario: t.camposFormulario,
+            estado: 'COMPLETADO',
+            formularioDatos: datos['datosFormulario'] ?? {},
+            observacion: datos['observacion'],
+            prioridad: t.prioridad,
+            fechaAsignacion: t.fechaAsignacion,
+            fechaCompletado: DateTime.now().toIso8601String(),
+          );
+        }
+
+        _actionSuccess = 'Tarea completada localmente. Se sincronizará al recuperar conexión.';
+        _loadingAction = false;
+        notifyListeners();
+        return true;
+      }
+
       await _apiService.completarTarea(tareaId, datos);
       _actionSuccess = 'Tarea completada. El trámite avanzó automáticamente.';
       await cargarDatos();
@@ -231,6 +336,7 @@ class AppProvider extends ChangeNotifier {
       return false;
     }
   }
+
 
   Future<bool> cambiarEstadoTarea(String tareaId, String estado) async {
     try {

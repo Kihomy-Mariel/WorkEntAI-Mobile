@@ -7,9 +7,12 @@ import '../models/models.dart';
 class AuthService {
   static const _tokenKey = 'wf_token';
   static const _userKey = 'wf_user';
+  final http.Client client;
+
+  AuthService({http.Client? client}) : client = client ?? http.Client();
 
   Future<AuthResponse> login(String email, String password) async {
-    final response = await http.post(
+    final response = await client.post(
       Uri.parse('${AppConfig.baseUrl}/auth/login'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'email': email, 'password': password}),

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/models.dart';
 import '../../services/app_provider.dart';
+import '../agente/agente_screen.dart';
 import '../tramite_detalle/tramite_detalle_screen.dart';
+
 
 class ClientePortalScreen extends StatefulWidget {
   const ClientePortalScreen({super.key});
@@ -96,9 +98,27 @@ class _ClientePortalScreenState extends State<ClientePortalScreen>
           );
         },
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AgenteScreen()),
+          );
+        },
+        backgroundColor: const Color(0xFF2563EB),
+        icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+        label: const Text(
+          'Asistente IA',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
     );
   }
 }
+
 
 // ── Tab: Políticas disponibles ────────────────────────────────
 class _PoliticasTab extends StatelessWidget {

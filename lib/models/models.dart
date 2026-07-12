@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 // ── CampoFormulario ───────────────────────────────────────────
 class CampoFormulario {
   final String nombre;
-  final String tipo; // text, textarea, number, boolean, select, file
+  final String tipo; // text, textarea, number, boolean, select, file, grid, fecha, hora, checkbox, radio
   final String etiqueta;
   final bool requerido;
   final List<String> opciones;
@@ -33,6 +33,7 @@ class AuthResponse {
   final String nombre;
   final String rol;
   final String departamento;
+  final List<String> departamentos;
 
   AuthResponse({
     required this.token,
@@ -41,6 +42,7 @@ class AuthResponse {
     required this.nombre,
     required this.rol,
     required this.departamento,
+    this.departamentos = const [],
   });
 
   factory AuthResponse.fromJson(Map<String, dynamic> j) => AuthResponse(
@@ -50,6 +52,9 @@ class AuthResponse {
         nombre: j['nombre'] ?? '',
         rol: j['rol'] ?? '',
         departamento: j['departamento'] ?? '',
+        departamentos: (j['departamentos'] as List?)
+            ?.map((e) => e.toString())
+            .toList() ?? [],
       );
 
   Map<String, dynamic> toJson() => {
@@ -59,6 +64,7 @@ class AuthResponse {
         'nombre': nombre,
         'rol': rol,
         'departamento': departamento,
+        'departamentos': departamentos,
       };
 }
 

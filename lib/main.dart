@@ -5,6 +5,10 @@ import 'services/app_provider.dart';
 import 'services/notification_service.dart';
 import 'screens/splash/splash_screen.dart';
 
+/// Clave global de navegación para acceder al navigator desde
+/// servicios sin BuildContext (ej: push notification handler).
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -37,6 +41,8 @@ class WorkEntAIApp extends StatelessWidget {
     return MaterialApp(
       title: 'WorkEntAI',
       debugShowCheckedModeBanner: false,
+      // Clave de navegación global: permite navegar desde NotificationService
+      navigatorKey: navigatorKey,
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.light,

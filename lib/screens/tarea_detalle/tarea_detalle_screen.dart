@@ -51,6 +51,8 @@ class _TareaDetalleScreenState extends State<TareaDetalleScreen> {
         _fieldValues[campo.nombre] = '';
       } else if (campo.tipo == 'select') {
         _fieldValues[campo.nombre] = '';
+      } else {
+        _initSpecialField(campo);
       }
     }
     // Si no hay campos dinámicos, mantener el campo legacy de observación
@@ -62,6 +64,27 @@ class _TareaDetalleScreenState extends State<TareaDetalleScreen> {
 
   bool _isTextType(String tipo) =>
       tipo == 'text' || tipo == 'textarea' || tipo == 'number';
+
+  /// Inicializa el valor por defecto para tipos especiales.
+  void _initSpecialField(CampoFormulario campo) {
+    switch (campo.tipo) {
+      case 'fecha':
+        _fieldValues[campo.nombre] = ''; // ISO date string
+        break;
+      case 'hora':
+        _fieldValues[campo.nombre] = ''; // HH:mm string
+        break;
+      case 'checkbox':
+        _fieldValues[campo.nombre] = <String>[]; // lista de seleccionados
+        break;
+      case 'radio':
+        _fieldValues[campo.nombre] = '';
+        break;
+      case 'grid':
+        _fieldValues[campo.nombre] = <Map<String, String>>[]; // [{descripcion, valor}]
+        break;
+    }
+  }
 
   @override
   void dispose() {
@@ -309,10 +332,265 @@ class _TareaDetalleScreenState extends State<TareaDetalleScreen> {
         return _buildBooleanField(campo.nombre);
       case 'select':
         return _buildSelectField(campo.nombre, campo.opciones);
+      case 'fecha':
+        return _buildFechaField(campo.nombre);
+      case 'hora':
+        return _buildHoraField(campo.nombre);
+      case 'checkbox':
+        return _buildCheckboxField(campo.nombre, campo.opciones);
+      case 'radio':
+        return _buildRadioGroupField(campo.nombre, campo.opciones);
+      case 'grid':
+        return _buildGridField(campo.nombre);
       default:
+        // file y otros: campo de texto simple como fallback
         return _buildTextField(campo.nombre, maxLines: 1);
     }
   }
+
+  // ── Builders: Fecha y Hora ────────────────────────────────────────
+
+  Widget _buildFechaField(String nombre) {
+    final valor = (_fieldValues[nombre] ?? '') as String;
+    return GestureDetector(
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: valor.isNotEmpty
+              ? DateTime.tryParse(valor) ?? DateTime.now()
+              : DateTime.now(),
+          firstDate: DateTime(2020),
+          lastDate: DateTime(2100),
+          builder: (ctx, child) => Theme(
+            data: Theme.of(ctx).copyWith(
+              colorScheme: const ColorScheme.dark(
+                primary: Color(0xFF3B82F6), surface: Color(0xFF1E293B)),
+            ),
+            child: child!,
+          ),
+        );
+        if (picked != null) {
+          setState(() {
+            _fieldValues[nombre] =
+                '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+          });
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_today, color: Colors.blue, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              valor.isNotEmpty ? valor : 'Seleccionar fecha...',
+              style: TextStyle(
+                color: valor.isNotEmpty ? Colors.white : Colors.grey,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHoraField(String nombre) {
+    final valor = (_fieldValues[nombre] ?? '') as String;
+    return GestureDetector(
+      onTap: () async {
+        final parts = valor.split(':');
+        final picked = await showTimePicker(
+          context: context,
+          initialTime: valor.isNotEmpty && parts.length == 2
+              ? TimeOfDay(
+                  hour: int.tryParse(parts[0]) ?? 0,
+                  minute: int.tryParse(parts[1]) ?? 0)
+              : TimeOfDay.now(),
+          builder: (ctx, child) => Theme(
+            data: Theme.of(ctx).copyWith(
+              colorScheme: const ColorScheme.dark(
+                primary: Color(0xFF3B82F6), surface: Color(0xFF1E293B)),
+            ),
+            child: child!,
+          ),
+        );
+        if (picked != null) {
+          setState(() {
+            _fieldValues[nombre] =
+                '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+          });
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.access_time, color: Colors.blue, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              valor.isNotEmpty ? valor : 'Seleccionar hora...',
+              style: TextStyle(
+                color: valor.isNotEmpty ? Colors.white : Colors.grey,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Builders: Checkbox y Radio ────────────────────────────────────
+
+  Widget _buildCheckboxField(String nombre, List<String> opciones) {
+    final seleccionados = (_fieldValues[nombre] ?? <String>[]) as List<String>;
+    if (opciones.isEmpty) return _buildTextField(nombre, maxLines: 1);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: opciones.map((op) {
+        final activo = seleccionados.contains(op);
+        return FilterChip(
+          label: Text(op,
+              style: TextStyle(
+                color: activo ? Colors.white : Colors.grey,
+                fontSize: 12,
+              )),
+          selected: activo,
+          selectedColor: const Color(0xFF3B82F6),
+          backgroundColor: Colors.white.withValues(alpha: 0.06),
+          checkmarkColor: Colors.white,
+          side: BorderSide(
+              color: activo
+                  ? const Color(0xFF3B82F6)
+                  : Colors.white.withValues(alpha: 0.15)),
+          onSelected: (v) {
+            setState(() {
+              final List<String> nuevos = List.from(seleccionados);
+              v ? nuevos.add(op) : nuevos.remove(op);
+              _fieldValues[nombre] = nuevos;
+            });
+          },
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildRadioGroupField(String nombre, List<String> opciones) {
+    final seleccionado = (_fieldValues[nombre] ?? '') as String;
+    if (opciones.isEmpty) return _buildTextField(nombre, maxLines: 1);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: opciones.map((op) {
+        final activo = seleccionado == op;
+        return ChoiceChip(
+          label: Text(op,
+              style: TextStyle(
+                color: activo ? Colors.white : Colors.grey,
+                fontSize: 12,
+              )),
+          selected: activo,
+          selectedColor: const Color(0xFF3B82F6),
+          backgroundColor: Colors.white.withValues(alpha: 0.06),
+          side: BorderSide(
+              color: activo
+                  ? const Color(0xFF3B82F6)
+                  : Colors.white.withValues(alpha: 0.15)),
+          onSelected: (_) => setState(() => _fieldValues[nombre] = op),
+        );
+      }).toList(),
+    );
+  }
+
+  // ── Builder: Grid/Tabla ───────────────────────────────────────────────
+
+  Widget _buildGridField(String nombre) {
+    // ignore: avoid_dynamic_calls
+    final filas = List<Map<String, dynamic>>.from(
+        (_fieldValues[nombre] as List?) ?? []);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ...List.generate(filas.length, (i) {
+          final fila = filas[i];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    decoration: _gridDecoration('Descripción'),
+                    onChanged: (v) => setState(() {
+                      fila['descripcion'] = v;
+                      filas[i] = fila;
+                      _fieldValues[nombre] = filas;
+                    }),
+                    controller: TextEditingController(
+                        text: fila['descripcion']?.toString() ?? ''),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: TextField(
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    decoration: _gridDecoration('Valor'),
+                    onChanged: (v) => setState(() {
+                      fila['valor'] = v;
+                      filas[i] = fila;
+                      _fieldValues[nombre] = filas;
+                    }),
+                    controller: TextEditingController(
+                        text: fila['valor']?.toString() ?? ''),
+                  ),
+                ),
+                IconButton(
+                  icon:
+                      const Icon(Icons.close, color: Color(0xFFEF4444), size: 18),
+                  onPressed: () => setState(() {
+                    filas.removeAt(i);
+                    _fieldValues[nombre] = filas;
+                  }),
+                ),
+              ],
+            ),
+          );
+        }),
+        TextButton.icon(
+          onPressed: () => setState(() {
+            filas.add({'descripcion': '', 'valor': ''});
+            _fieldValues[nombre] = filas;
+          }),
+          icon: const Icon(Icons.add, size: 16, color: Color(0xFF3B82F6)),
+          label: const Text('Agregar fila',
+              style: TextStyle(color: Color(0xFF3B82F6), fontSize: 12)),
+        ),
+      ],
+    );
+  }
+
+  InputDecoration _gridDecoration(String hint) => InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.05),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        border:
+            OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+      );
 
   Widget _buildTextField(String nombre,
       {int maxLines = 1, TextInputType? keyboardType}) {

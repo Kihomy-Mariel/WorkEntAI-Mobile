@@ -189,6 +189,132 @@ class ApiService {
     throw Exception(_errorMsg(res));
   }
 
+
+  // ── Agente IA (CU-22/23) ──────────────────────────────────────
+  Future<Map<String, dynamic>> iniciarAgenteSesion() async {
+    final res = await http.post(
+      Uri.parse('${AppConfig.baseUrl}/agente/sesion'),
+      headers: await _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    }
+    throw Exception(_errorMsg(res));
+  }
+
+  Future<Map<String, dynamic>> enviarAgenteMensaje(String sessionId, String mensaje) async {
+    final res = await http.post(
+      Uri.parse('${AppConfig.baseUrl}/agente/sesion/$sessionId/mensaje'),
+      headers: await _headers(),
+      body: jsonEncode({'mensaje': mensaje}),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    }
+    throw Exception(_errorMsg(res));
+  }
+
+  Future<Map<String, dynamic>> obtenerAgenteSesion(String sessionId) async {
+    final res = await http.get(
+      Uri.parse('${AppConfig.baseUrl}/agente/sesion/$sessionId'),
+      headers: await _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    }
+    throw Exception(_errorMsg(res));
+  }
+
+  Future<void> cerrarAgenteSesion(String sessionId) async {
+    final res = await http.delete(
+      Uri.parse('${AppConfig.baseUrl}/agente/sesion/$sessionId'),
+      headers: await _headers(),
+    );
+    if (res.statusCode != 204 && res.statusCode != 200) {
+      throw Exception(_errorMsg(res));
+    }
+  }
+
+  // ── Gestión Documental (CU-24 al 27) ─────────────────────────
+  Future<List<dynamic>> listarDocumentos(String tramiteId) async {
+    final res = await http.get(
+      Uri.parse('${AppConfig.baseUrl}/documentos/tramite/$tramiteId'),
+      headers: await _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    }
+    throw Exception(_errorMsg(res));
+  }
+
+  Future<String> obtenerDocumentoUrl(String documentoId) async {
+    final res = await http.get(
+      Uri.parse('${AppConfig.baseUrl}/documentos/$documentoId/url'),
+      headers: await _headers(),
+    );
+    if (res.statusCode == 200) {
+      final body = jsonDecode(res.body);
+      return body['url'] ?? '';
+    }
+    throw Exception(_errorMsg(res));
+  }
+
+  Future<Map<String, dynamic>> subirDocumento({
+    required String tramiteId,
+    required String filePath,
+    required String fileName,
+    String? nodoId,
+    String? descripcion,
+  }) async {
+    final token = await _authService.getToken();
+    final uri = Uri.parse('${AppConfig.baseUrl}/documentos/tramite/$tramiteId');
+    final request = http.MultipartRequest('POST', uri);
+
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    if (nodoId != null && nodoId.isNotEmpty) {
+      request.fields['nodoId'] = nodoId;
+    }
+    if (descripcion != null && descripcion.isNotEmpty) {
+      request.fields['descripcion'] = descripcion;
+    }
+
+    request.files.add(await http.MultipartFile.fromPath('archivo', filePath, filename: fileName));
+
+    final streamedResponse = await request.send();
+    final res = await http.Response.fromStream(streamedResponse);
+
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    }
+    throw Exception(_errorMsg(res));
+  }
+
+  // ── Motor Predictivo (CU-28/29) ──────────────────────────────
+  Future<Map<String, dynamic>> predecirRutaOptima(String politicaId) async {
+    final res = await http.get(
+      Uri.parse('${AppConfig.baseUrl}/predictor/ruta/$politicaId'),
+      headers: await _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    }
+    throw Exception(_errorMsg(res));
+  }
+
+  Future<Map<String, dynamic>> calcularRiesgoDemora(String tramiteId) async {
+    final res = await http.get(
+      Uri.parse('${AppConfig.baseUrl}/predictor/riesgo/$tramiteId'),
+      headers: await _headers(),
+    );
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body);
+    }
+    throw Exception(_errorMsg(res));
+  }
+
   // ── Usuario ───────────────────────────────────────────────────
   Future<Map<String, dynamic>> getUsuario(String id) async {
     final res = await http.get(
@@ -210,3 +336,4 @@ class ApiService {
     throw Exception(_errorMsg(res));
   }
 }
+

@@ -4,43 +4,83 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
 import '../../models/models.dart';
 import '../../services/api_service.dart';
 import '../../services/app_provider.dart';
 
+
 class TramiteDetalleScreen extends StatefulWidget {
-  final Tramite tramite;
-  const TramiteDetalleScreen({super.key, required this.tramite});
+  final Tramite? tramite;
+  final String? tramiteId;
+
+  const TramiteDetalleScreen({super.key, required this.tramite})
+      : tramiteId = null;
+
+  /// Constructor alternativo para navegar desde notificaciones push (CU-14),
+  /// cuando solo se dispone del ID del trámite.
+  const TramiteDetalleScreen.byId({super.key, required this.tramiteId})
+      : tramite = null;
 
   @override
   State<TramiteDetalleScreen> createState() => _TramiteDetalleScreenState();
 }
 
 class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
-  late Tramite _tramite;
+  Tramite? _tramite;
   bool _loadingPdf = false;
   bool _refreshing = false;
+  bool _loadingInitial = false;
   final _apiService = ApiService();
+  Future<List<dynamic>>? _documentosFuture;
 
   @override
   void initState() {
     super.initState();
-    _tramite = widget.tramite;
+    if (widget.tramite != null) {
+      _tramite = widget.tramite;
+      _cargarDocumentos();
+    } else if (widget.tramiteId != null) {
+      // Cargado desde notificación push: obtener tramite completo por ID
+      _cargarTramitePorId(widget.tramiteId!);
+    }
+  }
+
+  void _cargarDocumentos() {
+    if (_tramite != null) {
+      _documentosFuture = _apiService.listarDocumentos(_tramite!.id);
+    }
+  }
+
+  Future<void> _cargarTramitePorId(String id) async {
+    setState(() => _loadingInitial = true);
+    final updated = await context.read<AppProvider>().refreshTramite(id);
+    if (mounted) {
+      setState(() {
+        _tramite = updated;
+        _loadingInitial = false;
+        _cargarDocumentos();
+      });
+    }
   }
 
   Future<void> _refresh() async {
+    if (_tramite == null) return;
     setState(() => _refreshing = true);
     final updated =
-        await context.read<AppProvider>().refreshTramite(_tramite.id);
+        await context.read<AppProvider>().refreshTramite(_tramite!.id);
     if (updated != null && mounted) {
       setState(() {
         _tramite = updated;
         _refreshing = false;
+        _cargarDocumentos();
       });
     } else {
       setState(() => _refreshing = false);
     }
   }
+
 
   Future<void> _descargarPdf() async {
     setState(() => _loadingPdf = true);
@@ -64,8 +104,8 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
       }
 
       // 2. Descargar bytes del PDF
-      final bytes = await _apiService.descargarPdf(_tramite.id);
-      final fileName = 'tramite-${_tramite.refDisplay}.pdf';
+      final bytes = await _apiService.descargarPdf(_tramite!.id);
+      final fileName = 'tramite-${_tramite!.refDisplay}.pdf';
 
       // 3. Guardar en Downloads
       final filePath = await _guardarEnDownloads(bytes, fileName);
@@ -164,6 +204,19 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Mostrar loading si el trámite se está cargando desde ID (notificación push)
+    if (_loadingInitial || _tramite == null) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          title: const Text('Cargando trámite...'),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(color: Color(0xFF2563EB)),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -171,7 +224,7 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _tramite.refDisplay,
+              _tramite!.refDisplay,
               style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
@@ -180,7 +233,7 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
               ),
             ),
             Text(
-              _tramite.nombrePolitica ?? 'Trámite',
+              _tramite!.nombrePolitica ?? 'Trámite',
               style: const TextStyle(
                 fontSize: 11,
                 color: Color(0xFF64748B),
@@ -222,26 +275,37 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
               _buildEstadoCard(),
               const SizedBox(height: 16),
 
+              // ── Análisis predictivo ───────────────────────
+              if (_tramite!.estado == 'EN_PROCESO') ...[
+                _buildPredictorCard(),
+                const SizedBox(height: 16),
+              ],
+
               // ── Tracker de progreso ───────────────────────
               _buildTrackerCard(),
+              const SizedBox(height: 16),
+
+              // ── Documentos Adjuntos (S3) ──────────────────
+              _buildDocumentosSection(),
               const SizedBox(height: 16),
 
               // ── Info general ──────────────────────────────
               _buildInfoCard(),
               const SizedBox(height: 16),
 
-              // ── Datos formulario (si completado) ──────────
-              if (_tramite.estado == 'COMPLETADO' &&
-                  _tramite.datosFormulario != null &&
-                  _tramite.datosFormulario!.isNotEmpty) ...[
+              // ── Datos formulario (si completado) ────────────
+              if (_tramite!.estado == 'COMPLETADO' &&
+                  _tramite!.datosFormulario != null &&
+                  _tramite!.datosFormulario!.isNotEmpty) ...[
                 _buildDatosCard(),
                 const SizedBox(height: 16),
               ],
 
-              // ── Botón PDF ─────────────────────────────────
-              if (_tramite.estado == 'COMPLETADO') _buildPdfButton(),
+              // ── Botón PDF ───────────────────────────────
+              if (_tramite!.estado == 'COMPLETADO') _buildPdfButton(),
 
               const SizedBox(height: 32),
+
             ],
           ),
         ),
@@ -250,6 +314,7 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
   }
 
   Widget _buildEstadoCard() {
+    final tramite = _tramite!;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -263,12 +328,12 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: _tramite.estadoColor.withValues(alpha: 0.1),
+              color: tramite.estadoColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Center(
               child: Text(
-                _tramite.estadoEmoji,
+                tramite.estadoEmoji,
                 style: const TextStyle(fontSize: 26),
               ),
             ),
@@ -279,11 +344,11 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _tramite.estadoLabel,
+                  tramite.estadoLabel,
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
-                    color: _tramite.estadoColor,
+                    color: tramite.estadoColor,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -304,11 +369,11 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
   }
 
   String _getEstadoDescripcion() {
-    switch (_tramite.estado) {
+    switch (_tramite!.estado) {
       case 'NUEVO':
         return 'Tu solicitud fue recibida. El administrador la revisará pronto.';
       case 'EN_PROCESO':
-        return 'Tu trámite está siendo procesado en ${_tramite.departamentoActual ?? 'un departamento'}.';
+        return 'Tu trámite está siendo procesado en ${_tramite!.departamentoActual ?? 'un departamento'}.';
       case 'COMPLETADO':
         return 'Tu trámite fue completado exitosamente. Puedes descargar el comprobante.';
       case 'RECHAZADO':
@@ -363,9 +428,10 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
 
   List<_PasoTracker> _buildPasos() {
     final pasos = <_PasoTracker>[];
+    final tramite = _tramite!;
 
     // Pasos completados del historial
-    for (final h in _tramite.historial) {
+    for (final h in tramite.historial) {
       pasos.add(_PasoTracker(
         nombre: h.nombreNodo,
         departamento: h.departamento,
@@ -379,11 +445,10 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
     }
 
     // Paso actual (si en proceso)
-    if (_tramite.estado == 'EN_PROCESO' &&
-        _tramite.nombreNodoActual != null) {
+    if (tramite.estado == 'EN_PROCESO' && tramite.nombreNodoActual != null) {
       pasos.add(_PasoTracker(
-        nombre: _tramite.nombreNodoActual!,
-        departamento: _tramite.departamentoActual,
+        nombre: tramite.nombreNodoActual!,
+        departamento: tramite.departamentoActual,
         fecha: null,
         completado: false,
         actual: true,
@@ -576,6 +641,7 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
   }
 
   Widget _buildInfoCard() {
+    final tramite = _tramite!;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -601,16 +667,16 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          _buildInfoRow('Referencia', _tramite.refDisplay),
-          _buildInfoRow('Política', _tramite.nombrePolitica ?? '—'),
-          if (_tramite.descripcion != null && _tramite.descripcion!.isNotEmpty)
-            _buildInfoRow('Descripción', _tramite.descripcion!),
-          _buildInfoRow('Prioridad', _tramite.prioridad ?? 'MEDIA'),
-          _buildInfoRow('Fecha inicio', _tramite.fechaInicioFormatted),
-          if (_tramite.fechaFinFormatted != null)
-            _buildInfoRow('Fecha fin', _tramite.fechaFinFormatted!),
-          if (_tramite.duracionMinutos != null)
-            _buildInfoRow('Duración total', _tramite.duracionFormatted),
+          _buildInfoRow('Referencia', tramite.refDisplay),
+          _buildInfoRow('Política', tramite.nombrePolitica ?? '—'),
+          if (tramite.descripcion != null && tramite.descripcion!.isNotEmpty)
+            _buildInfoRow('Descripción', tramite.descripcion!),
+          _buildInfoRow('Prioridad', tramite.prioridad ?? 'MEDIA'),
+          _buildInfoRow('Fecha inicio', tramite.fechaInicioFormatted),
+          if (tramite.fechaFinFormatted != null)
+            _buildInfoRow('Fecha fin', tramite.fechaFinFormatted!),
+          if (tramite.duracionMinutos != null)
+            _buildInfoRow('Duración total', tramite.duracionFormatted),
         ],
       ),
     );
@@ -649,7 +715,7 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
   }
 
   Widget _buildDatosCard() {
-    final datos = _tramite.datosFormulario!;
+    final datos = _tramite!.datosFormulario!;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -746,7 +812,349 @@ class _TramiteDetalleScreenState extends State<TramiteDetalleScreen> {
       ),
     );
   }
+
+  Widget _buildPredictorCard() {
+    final isOffline = context.read<AppProvider>().isOffline;
+    if (isOffline) {
+      return const SizedBox.shrink();
+    }
+
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _apiService.calcularRiesgoDemora(_tramite!.id),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF2563EB)),
+              ),
+            ),
+          );
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return const SizedBox.shrink();
+        }
+
+        final data = snapshot.data!;
+        final int score = data['score'] ?? 0;
+        final String explicacion = data['explicacion'] ?? '';
+
+        Color progressColor = const Color(0xFF22C55E);
+        String nivel = 'BAJO';
+        if (score >= 75) {
+          progressColor = const Color(0xFFEF4444);
+          nivel = 'ALTO';
+        } else if (score >= 45) {
+          progressColor = const Color(0xFFF59E0B);
+          nivel = 'MEDIO';
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text('🔮', style: TextStyle(fontSize: 16)),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Análisis Predictivo (IA)',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: progressColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'RIESGO $nivel',
+                      style: TextStyle(
+                        color: progressColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: CircularProgressIndicator(
+                          value: score / 100,
+                          backgroundColor: const Color(0xFFE2E8F0),
+                          valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+                          strokeWidth: 5,
+                        ),
+                      ),
+                      Text(
+                        '$score%',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: progressColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Probabilidad de retraso',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF475569),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          explicacion,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF64748B),
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDocumentosSection() {
+    final isOffline = context.read<AppProvider>().isOffline;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.folder_open_outlined, size: 18, color: Color(0xFF2563EB)),
+              const SizedBox(width: 8),
+              const Text(
+                'Documentos Adjuntos (S3)',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const Spacer(),
+              if (!isOffline)
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline, color: Color(0xFF2563EB)),
+                  onPressed: _refreshing ? null : _subirDocumento,
+                  tooltip: 'Subir documento',
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (isOffline)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                'Gestión de documentos no disponible en modo offline.',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+              ),
+            )
+          else
+            FutureBuilder<List<dynamic>>(
+              future: _documentosFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF2563EB)),
+                      ),
+                    ),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return Text(
+                    'Error cargando documentos: ${snapshot.error}',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
+                  );
+                }
+                final list = snapshot.data ?? [];
+                if (list.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16.0),
+                    child: Center(
+                      child: Text(
+                        'No hay documentos adjuntos en este trámite.',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: list.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                  itemBuilder: (context, idx) {
+                    final doc = list[idx] as Map<String, dynamic>;
+                    final docId = doc['id'];
+                    final String nombre = doc['nombre'] ?? 'Documento';
+                    final int version = doc['version'] ?? 1;
+                    final String subidoPor = doc['subidoPorNombre'] ?? 'Usuario';
+                    final String fechaRaw = doc['fechaSubida'] ?? '';
+                    String fecha = '';
+                    try {
+                      final dt = DateTime.parse(fechaRaw);
+                      fecha = '${dt.day}/${dt.month}/${dt.year}';
+                    } catch (_) {
+                      fecha = fechaRaw;
+                    }
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.insert_drive_file_outlined, color: Color(0xFF64748B), size: 28),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  nombre,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1E293B),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  'Versión $version · Subido por $subidoPor el $fecha',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.visibility_outlined, color: Color(0xFF2563EB), size: 20),
+                            onPressed: _loadingPdf ? null : () => _abrirDocumento(docId, nombre),
+                            tooltip: 'Visualizar',
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _abrirDocumento(String docId, String nombreDoc) async {
+    setState(() => _loadingPdf = true);
+    try {
+      final url = await _apiService.obtenerDocumentoUrl(docId);
+      final resp = await http.get(Uri.parse(url));
+
+      final tempDir = await getTemporaryDirectory();
+      final filePath = '${tempDir.path}/$nombreDoc';
+      final file = File(filePath);
+      await file.writeAsBytes(resp.bodyBytes);
+
+      setState(() => _loadingPdf = false);
+      await OpenFilex.open(filePath);
+    } catch (e) {
+      setState(() => _loadingPdf = false);
+      _showSnackBar('No se pudo abrir el documento: $e', isError: true);
+    }
+  }
+
+  Future<void> _subirDocumento() async {
+    final result = await FilePicker.platform.pickFiles();
+    if (result == null || result.files.single.path == null) return;
+
+    final path = result.files.single.path!;
+    final name = result.files.single.name;
+
+    setState(() => _refreshing = true);
+
+    try {
+      await _apiService.subirDocumento(
+        tramiteId: _tramite!.id,
+        filePath: path,
+        fileName: name,
+        descripcion: 'Subido desde dispositivo móvil',
+      );
+
+      _showSnackBar('Documento subido correctamente a S3');
+      _cargarDocumentos();
+      setState(() {
+        _refreshing = false;
+      });
+    } catch (e) {
+      setState(() {
+        _refreshing = false;
+      });
+      _showSnackBar('Error al subir documento: $e', isError: true);
+    }
+  }
+
 }
+
 
 class _PasoTracker {
   final String nombre;

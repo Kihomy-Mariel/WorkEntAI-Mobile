@@ -1,8 +1,8 @@
 #!/usr/bin/env dart
 // ignore_for_file: avoid_print
-/// Script de herramienta — no forma parte de la app.
-/// Genera el ícono PNG para flutter_launcher_icons.
-/// Ejecutar con: dart tool/generate_icon.dart
+// Script de herramienta — no forma parte de la app.
+// Genera el ícono PNG para flutter_launcher_icons.
+// Ejecutar con: dart tool/generate_icon.dart
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';

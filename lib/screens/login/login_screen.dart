@@ -277,30 +277,38 @@ class _LoginScreenState extends State<LoginScreen> {
                     border: Border.all(color: const Color(0xFFBAE6FD)),
                   ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.info_outline,
-                              size: 16, color: Color(0xFF0369A1)),
-                          SizedBox(width: 6),
+                          Icon(Icons.people_outline, size: 18, color: Color(0xFF0369A1)),
+                          SizedBox(width: 8),
                           Text(
-                            'Cuentas de demostración',
+                            'Modo Desarrollo',
                             style: TextStyle(
                               color: Color(0xFF0369A1),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      _buildTestBtn(
-                          '👤 Cliente', 'cliente@workflow.com'),
-                      _buildTestBtn(
-                          '🏥 Hospital', 'hospital@workflow.com'),
-                      _buildTestBtn(
-                          '🏗️ Constructora', 'constructora@workflow.com'),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF0369A1),
+                          elevation: 0,
+                          side: const BorderSide(color: Color(0xFFBAE6FD)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        icon: const Icon(Icons.list_alt, size: 18),
+                        label: const Text('Ver Usuarios de Prueba'),
+                        onPressed: _mostrarUsuariosDemo,
+                      ),
                     ],
                   ),
                 ),
@@ -313,35 +321,86 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildTestBtn(String label, String email) {
-    return GestureDetector(
-      onTap: () => _fillAccount(email),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: Color(0xFF0369A1),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const Text(
-              ' → ',
-              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-            ),
-            Text(
-              email,
-              style: const TextStyle(
-                color: Color(0xFF2563EB),
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
+  final List<Map<String, String>> _demoUsers = [
+    {'rol': '👑 ADMIN', 'nombre': 'Administrador Principal', 'email': 'admin@workent.com'},
+    {'rol': '💼 FUNCIONARIO', 'nombre': 'Atención al Cliente', 'email': 'atencionalcliente@workent.com'},
+    {'rol': '💼 FUNCIONARIO', 'nombre': 'Técnico', 'email': 'tecnico@workent.com'},
+    {'rol': '💼 FUNCIONARIO', 'nombre': 'Legal', 'email': 'legal@workent.com'},
+    {'rol': '💼 FUNCIONARIO', 'nombre': 'Almacén', 'email': 'almacen@workent.com'},
+    {'rol': '💼 FUNCIONARIO', 'nombre': 'Finanzas', 'email': 'finanzas@workent.com'},
+    {'rol': '👤 CLIENTE', 'nombre': 'Juan Perez', 'email': 'cliente1@correo.com'},
+    {'rol': '👤 CLIENTE', 'nombre': 'Maria Lopez', 'email': 'cliente2@correo.com'},
+    {'rol': '👤 CLIENTE', 'nombre': 'Carlos Ramirez', 'email': 'cliente3@correo.com'},
+    {'rol': '👤 CLIENTE', 'nombre': 'Ana Torres', 'email': 'cliente4@correo.com'},
+    {'rol': '👤 CLIENTE', 'nombre': 'Luis Gomez', 'email': 'cliente5@correo.com'},
+    {'rol': '👤 CLIENTE', 'nombre': 'Sofia Vargas', 'email': 'cliente6@correo.com'},
+  ];
+
+  void _mostrarUsuariosDemo() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.only(top: 16),
+          child: Column(
+            children: [
+              const Text(
+                'Seleccionar Usuario',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: _demoUsers.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final u = _demoUsers[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: const Color(0xFFEFF6FF),
+                        child: Text(
+                          u['rol']!.split(' ')[0],
+                          style: const TextStyle(fontSize: 18),
+                        ),
+                      ),
+                      title: Text(
+                        u['nombre']!,
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      subtitle: Text(
+                        '${u['rol']!.split(' ')[1]} • ${u['email']}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _fillAccountAndLogin(u['email']!);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
+  }
+
+  void _fillAccountAndLogin(String email) {
+    setState(() {
+      _emailCtrl.text = email;
+      _passCtrl.text = '123456';
+    });
+    // Iniciar sesión automáticamente después de llenar los campos
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _login();
+    });
   }
 }

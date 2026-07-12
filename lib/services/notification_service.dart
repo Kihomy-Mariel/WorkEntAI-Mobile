@@ -167,11 +167,45 @@ class NotificationService {
   }
 
   static void _handleNotifTap(Map<String, dynamic> data) {
-    // Aquí puedes navegar a la pantalla correcta según el tipo
-    final tipo = data['tipo'] ?? '';
-    final referenciaId = data['referenciaId'] ?? '';
-    debugPrint('Notificación tapeada: tipo=$tipo, id=$referenciaId');
-    // La navegación se maneja en el AppNavigator
+    final tipo = (data['tipo'] ?? '').toString();
+    final referenciaId = (data['referenciaId'] ?? '').toString();
+    debugPrint('🔔 Notificación tapeada: tipo=$tipo, id=$referenciaId');
+
+    // Importar navigatorKey desde main.dart para navegar sin BuildContext (CU-14)
+    // La lógica de rutas sigue el patrón de tipoReferencia del backend
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _navigateFromNotification(tipo, referenciaId);
+    });
+  }
+
+  /// Navega a la pantalla correspondiente según el tipo de notificación.
+  /// Usa el navigatorKey global definido en main.dart (evita dependencia de BuildContext).
+  static void _navigateFromNotification(String tipo, String referenciaId) {
+    // navigatorKey se importa de main.dart (circular dep se evita con late import por nombre)
+    // En lugar de importar directamente para evitar circular, usamos el mecanismo de callback.
+    // La navegación real se delega al callback si está registrado.
+    if (_onNotificationNav != null && referenciaId.isNotEmpty) {
+      _onNotificationNav!(tipo, referenciaId);
+    } else {
+      debugPrint('⚠️ No hay handler de navegación registrado para notificaciones');
+    }
+  }
+
+  /// Callback de navegación registrado por el widget raíz (evita dependencia circular).
+  /// Llamar a [setNavigationHandler] desde el SplashScreen o HomeScreen después del login.
+  static void Function(String tipo, String referenciaId)? _onNotificationNav;
+
+  /// Registra el handler de navegación.
+  /// Llamar desde el primer widget con contexto de navegación disponible.
+  static void setNavigationHandler(
+      void Function(String tipo, String referenciaId) handler) {
+    _onNotificationNav = handler;
+    debugPrint('✅ NotificationService: handler de navegación registrado');
+  }
+
+  /// Limpia el handler (llamar en logout).
+  static void clearNavigationHandler() {
+    _onNotificationNav = null;
   }
 
   static AndroidNotificationCategory _getCategory(String tipo) {

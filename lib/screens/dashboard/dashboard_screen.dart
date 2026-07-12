@@ -42,21 +42,30 @@ class _DashboardScreenState extends State<DashboardScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(AppConfig.bgColor),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        backgroundColor: const Color(AppConfig.cardColor),
-        elevation: 0,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF2563EB), Color(0xFF7C3AED)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        elevation: 4,
+        shadowColor: const Color(0xFF2563EB).withValues(alpha: 0.3),
         title: Consumer<AppProvider>(
           builder: (_, provider, __) => Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Bienvenido, ${provider.user?['nombre'] ?? ''}',
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
               ),
               Text(
                 provider.user?['departamento'] ?? '',
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                style: const TextStyle(fontSize: 12, color: Colors.white70),
               ),
             ],
           ),
@@ -64,25 +73,26 @@ class _DashboardScreenState extends State<DashboardScreen>
         actions: [
           Consumer<AppProvider>(
             builder: (_, provider, __) => Stack(
-              alignment: Alignment.topRight,
+              alignment: Alignment.center,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.notifications_outlined),
+                  icon: const Icon(Icons.notifications_outlined, color: Colors.white),
                   onPressed: () {},
                 ),
                 if (provider.tareasPendientes.isNotEmpty)
                   Positioned(
-                    top: 8, right: 8,
+                    top: 10, right: 10,
                     child: Container(
                       width: 16, height: 16,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFEF4444),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444),
                         shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
                       ),
                       child: Center(
                         child: Text(
                           '${provider.tareasPendientes.length}',
-                          style: const TextStyle(color: Colors.white, fontSize: 9),
+                          style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -91,7 +101,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.logout, color: Colors.grey),
+            icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () async {
               await context.read<AppProvider>().logout();
               widget.onLogout();
@@ -100,10 +110,12 @@ class _DashboardScreenState extends State<DashboardScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: const Color(AppConfig.accentColor),
-          labelColor: const Color(AppConfig.accentColor),
-          unselectedLabelColor: Colors.grey,
+          indicatorColor: Colors.white,
+          indicatorWeight: 3,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white60,
           isScrollable: true,
+          labelStyle: const TextStyle(fontWeight: FontWeight.bold),
           tabs: const [
             Tab(text: '🔴 Pendientes'),
             Tab(text: '🟡 En Proceso'),
@@ -123,10 +135,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    _buildLista(provider.tareasPendientes, 'No tienes tareas pendientes'),
-                    _buildLista(provider.tareasEnProceso, 'No tienes tareas en proceso'),
-                    _buildLista(provider.tareasCompletadas, 'No tienes tareas completadas'),
-                    const KpiScreen(),
+                     _buildLista(provider.tareasPendientes, 'No tienes tareas pendientes'),
+                     _buildLista(provider.tareasEnProceso, 'No tienes tareas en proceso'),
+                     _buildLista(provider.tareasCompletadas, 'No tienes tareas completadas'),
+                     const KpiScreen(),
                   ],
                 ),
               ),
@@ -135,42 +147,53 @@ class _DashboardScreenState extends State<DashboardScreen>
         },
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(AppConfig.primaryColor),
+        backgroundColor: const Color(0xFF2563EB),
         onPressed: () => context.read<AppProvider>().cargarDatos(),
-        child: const Icon(Icons.refresh),
+        child: const Icon(Icons.refresh, color: Colors.white),
       ),
     );
   }
 
   Widget _buildStats(AppProvider provider) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      color: const Color(AppConfig.cardColor).withValues(alpha: 0.5),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            offset: const Offset(0, 4),
+            blurRadius: 10,
+          )
+        ],
+      ),
       child: Row(
         children: [
-          _buildStatChip('Total', '${provider.tareas.length}', Colors.white),
-          const SizedBox(width: 8),
-          _buildStatChip('Pendientes', '${provider.tareasPendientes.length}', const Color(0xFFEF4444)),
-          const SizedBox(width: 8),
-          _buildStatChip('Completadas', '${provider.tareasCompletadas.length}', const Color(0xFF22C55E)),
+          _buildStatChip('Total', '${provider.tareas.length}', const Color(0xFF3B82F6), Icons.folder_copy_outlined),
+          const SizedBox(width: 12),
+          _buildStatChip('Pendientes', '${provider.tareasPendientes.length}', const Color(0xFFEF4444), Icons.pending_actions),
+          const SizedBox(width: 12),
+          _buildStatChip('Completadas', '${provider.tareasCompletadas.length}', const Color(0xFF22C55E), Icons.check_circle_outline),
         ],
       ),
     );
   }
 
-  Widget _buildStatChip(String label, String valor, Color color) {
+  Widget _buildStatChip(String label, String valor, Color color, IconData icon) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
         child: Column(
           children: [
-            Text(valor, style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.bold)),
-            Text(label, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 8),
+            Text(valor, style: TextStyle(color: color, fontSize: 24, fontWeight: FontWeight.bold)),
+            Text(label, style: const TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
@@ -180,7 +203,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _buildLista(List<Tarea> tareas, String mensajeVacio) {
     if (tareas.isEmpty) return EmptyWidget(mensaje: mensajeVacio);
     return RefreshIndicator(
-      color: const Color(AppConfig.accentColor),
+      color: const Color(0xFF2563EB),
       onRefresh: () => context.read<AppProvider>().cargarDatos(),
       child: ListView.builder(
         padding: const EdgeInsets.all(16),

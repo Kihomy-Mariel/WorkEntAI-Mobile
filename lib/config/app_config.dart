@@ -2,14 +2,14 @@ class AppConfig {
   static String get baseUrl {
     return const String.fromEnvironment(
       'BASE_URL',
-      defaultValue: 'http://localhost:8080/api',
+      defaultValue: 'http://192.168.1.14:8080/api',
     );
   }
 
   static String get wsUrl {
     return const String.fromEnvironment(
       'WS_URL',
-      defaultValue: 'ws://localhost:8080/ws/websocket',
+      defaultValue: 'ws://192.168.1.14:8080/ws/websocket',
     );
   }
 
